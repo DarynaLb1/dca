@@ -8,15 +8,21 @@ PRIVATE_KEY = "YOUR_PRIVATE_KEY"
 WALLET_ADDRESS = "YOUR_WALLET_ADDRESS"
 TOKEN_ADDRESS = "TOKEN_CONTRACT_ADDRESS"
 UNISWAP_ROUTER_ADDRESS = "0xE592427A0AEce92De3Edee1F18E0157C05861564"  # Uniswap V3 Router
-AMOUNT_TO_BUY = Web3.to_wei(0.01, 'ether')  # Amount of ETH to buy
+AMOUNT_TO_BUY = Web3.to_wei(0.01, 'ether')  # Default amount of ETH to buy
 INTERVAL = 3600  # Interval in seconds (1 hour)
+PRICE_DROP_THRESHOLD = 0.8  # 20% drop
 
 # Initialize Web3
 w3 = Web3(Web3.HTTPProvider(INFURA_URL))
 router_abi = json.loads('[{"constant":false,"inputs":...}]')  # Uniswap router ABI
 router = w3.eth.contract(address=UNISWAP_ROUTER_ADDRESS, abi=router_abi)
 
-def buy_token():
+def get_token_price():
+    # Placeholder for actual price fetching logic
+    # In production, use an oracle or API (e.g., Chainlink, CoinGecko)
+    return 100  # Example static price
+
+def buy_token(amount):
     nonce = w3.eth.get_transaction_count(WALLET_ADDRESS)
     txn = router.functions.exactInputSingle({
         'tokenIn': w3.to_checksum_address(w3.eth.default_account),
@@ -24,12 +30,12 @@ def buy_token():
         'fee': 3000,  # Pool fee (0.3%)
         'recipient': WALLET_ADDRESS,
         'deadline': int(time.time()) + 600,
-        'amountIn': AMOUNT_TO_BUY,
+        'amountIn': amount,
         'amountOutMinimum': 0,
         'sqrtPriceLimitX96': 0
     }).build_transaction({
         'from': WALLET_ADDRESS,
-        'value': AMOUNT_TO_BUY,
+        'value': amount,
         'gas': 200000,
         'gasPrice': w3.to_wei('5', 'gwei'),
         'nonce': nonce
@@ -40,9 +46,16 @@ def buy_token():
     print(f'Transaction sent: {tx_hash.hex()}')
 
 def run_dca():
+    last_price = get_token_price()
     while True:
         try:
-            buy_token()
+            current_price = get_token_price()
+            if current_price < last_price * PRICE_DROP_THRESHOLD:
+                print("Price dropped more than 20%, increasing purchase amount!")
+                buy_token(AMOUNT_TO_BUY * 2)  # Double the purchase amount
+            else:
+                buy_token(AMOUNT_TO_BUY)
+            last_price = current_price
         except Exception as e:
             print(f'Error: {e}')
         time.sleep(INTERVAL)
