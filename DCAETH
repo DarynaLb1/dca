@@ -1,0 +1,51 @@
+from web3 import Web3
+import time
+import json
+
+# Configuration
+INFURA_URL = "https://mainnet.infura.io/v3/YOUR_INFURA_PROJECT_ID"
+PRIVATE_KEY = "YOUR_PRIVATE_KEY"
+WALLET_ADDRESS = "YOUR_WALLET_ADDRESS"
+TOKEN_ADDRESS = "TOKEN_CONTRACT_ADDRESS"
+UNISWAP_ROUTER_ADDRESS = "0xE592427A0AEce92De3Edee1F18E0157C05861564"  # Uniswap V3 Router
+AMOUNT_TO_BUY = Web3.to_wei(0.01, 'ether')  # Amount of ETH to buy
+INTERVAL = 3600  # Interval in seconds (1 hour)
+
+# Initialize Web3
+w3 = Web3(Web3.HTTPProvider(INFURA_URL))
+router_abi = json.loads('[{"constant":false,"inputs":...}]')  # Uniswap router ABI
+router = w3.eth.contract(address=UNISWAP_ROUTER_ADDRESS, abi=router_abi)
+
+def buy_token():
+    nonce = w3.eth.get_transaction_count(WALLET_ADDRESS)
+    txn = router.functions.exactInputSingle({
+        'tokenIn': w3.to_checksum_address(w3.eth.default_account),
+        'tokenOut': w3.to_checksum_address(TOKEN_ADDRESS),
+        'fee': 3000,  # Pool fee (0.3%)
+        'recipient': WALLET_ADDRESS,
+        'deadline': int(time.time()) + 600,
+        'amountIn': AMOUNT_TO_BUY,
+        'amountOutMinimum': 0,
+        'sqrtPriceLimitX96': 0
+    }).build_transaction({
+        'from': WALLET_ADDRESS,
+        'value': AMOUNT_TO_BUY,
+        'gas': 200000,
+        'gasPrice': w3.to_wei('5', 'gwei'),
+        'nonce': nonce
+    })
+    
+    signed_txn = w3.eth.account.sign_transaction(txn, private_key=PRIVATE_KEY)
+    tx_hash = w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+    print(f'Transaction sent: {tx_hash.hex()}')
+
+def run_dca():
+    while True:
+        try:
+            buy_token()
+        except Exception as e:
+            print(f'Error: {e}')
+        time.sleep(INTERVAL)
+
+if __name__ == "__main__":
+    run_dca()
